@@ -246,32 +246,61 @@ export function canSpawnCreature(
   };
 }
 
-export function getRandomWildFieldSpawn(worldRadius: number = 50): { x: number; y: number; angleDeg: number } {
+export function getRandomWildFieldSpawn(
+  worldRadius: number = 50,
+  existingCreatures: { x: number; y: number }[] = []
+): { x: number; y: number; angleDeg: number } {
   const baseSize = Math.max(15, worldRadius * 0.35);
   const baseMinX = worldRadius - baseSize;
   const baseMinY = worldRadius - baseSize;
+  const worldSize = worldRadius * 2;
+  const minClearance = 6.0; // Minimum 6 grid cells distance between creatures
 
-  let x = 0;
-  let y = 0;
-  let attempts = 0;
+  let bestX = 0;
+  let bestY = 0;
+  let maxMinDist = -1;
 
-  while (attempts < 60) {
+  for (let attempt = 0; attempt < 120; attempt++) {
     const angle = Math.random() * Math.PI * 2;
     const r = Math.random() * (worldRadius * 0.82);
-    x = Math.round(Math.cos(angle) * r);
-    y = Math.round(Math.sin(angle) * r);
+    const x = Math.round(Math.cos(angle) * r);
+    const y = Math.round(Math.sin(angle) * r);
 
-    // Ensure it is outside the base zone
-    if (x < baseMinX - 3 || y < baseMinY - 3) {
-      break;
+    // Ensure it is strictly outside the base zone (in the wild field)
+    if (x >= baseMinX - 3 && y >= baseMinY - 3) {
+      continue;
     }
-    attempts++;
+
+    // Check distance to all existing creatures with toroidal wrap
+    let closestDist = Infinity;
+    for (let i = 0; i < existingCreatures.length; i++) {
+      const c = existingCreatures[i];
+      let dx = Math.abs(x - c.x);
+      if (dx > worldRadius) dx = worldSize - dx;
+      let dy = Math.abs(y - c.y);
+      if (dy > worldRadius) dy = worldSize - dy;
+      const d = Math.hypot(dx, dy);
+      if (d < closestDist) {
+        closestDist = d;
+      }
+    }
+
+    // If point has safe clearance or no existing creatures, accept immediately
+    if (closestDist >= minClearance || existingCreatures.length === 0) {
+      const angleDeg = Math.floor(Math.random() * 360);
+      return { x, y, angleDeg };
+    }
+
+    if (closestDist > maxMinDist) {
+      maxMinDist = closestDist;
+      bestX = x;
+      bestY = y;
+    }
   }
 
-  // Random orientation angle 0..359
+  // Fallback to the point with maximum clearance found
   const angleDeg = Math.floor(Math.random() * 360);
-
-  return { x, y, angleDeg };
+  return { x: bestX, y: bestY, angleDeg };
 }
 
 // Новые пресеты чудиков-ботов, полностью соответствующие правилам:
@@ -279,8 +308,8 @@ export function getRandomWildFieldSpawn(worldRadius: number = 50): { x: number; 
 // обеспечивая максимальное разнообразие масс, скоростей, инерции и поведения на поле.
 export const DEFAULT_PRESETS: { name: string; description: string; color: string; elements: CreatureElement[] }[] = [
   {
-    name: 'Жнец-Крушитель',
-    description: 'Тяжёлый бронированный бот-крушитель. Массивный панцирь с тяжелыми рёбрами, центральный шарнир и сокрушительная челюсть. Высокая масса и разрушительный таран.',
+    name: 'Бот Зубастый Колобок',
+    description: 'Тяжёлый бронированный шар с двойным запасом челюстей и мощным тараном. Высокая масса, устойчивость к ударам.',
     color: '#ef4444',
     elements: [
       { id: 'head-top', relX: 0, relY: -1, type: 'head', weight: 1, headAngle: 270 },
@@ -297,8 +326,8 @@ export const DEFAULT_PRESETS: { name: string; description: string; color: string
     ],
   },
   {
-    name: 'Молниеносный Кусач',
-    description: 'Сверхлегкий скоростной бот. Диагональные ребра под 45°, острая челюсть и высокочастотные мышцы. Быстрые броски и спринт за добычей.',
+    name: 'Бот Шнырь-Торпеда',
+    description: 'Сверхскоростной лёгкий бот-стрела. Диагональные ребра под 45°, острая челюсть и высокочастотные мышцы. Мгновенные рывки к цели.',
     color: '#f59e0b',
     elements: [
       { id: 'head-top', relX: 0, relY: -1, type: 'head', weight: 1, headAngle: 270 },
@@ -313,23 +342,8 @@ export const DEFAULT_PRESETS: { name: string; description: string; color: string
     ],
   },
   {
-    name: 'Вихревой Жвалоног',
-    description: 'Асимметричный хищный бот. Смещенный центр масс создает непрерывное вихревое вращение и круговую атаку челюстью по спирали.',
-    color: '#8b5cf6',
-    elements: [
-      { id: 'head-top', relX: 0, relY: -1, type: 'head', weight: 1, headAngle: 270 },
-      { id: 'jaw-top', relX: 0, relY: -1, type: 'head-jaw', weight: 0, headAngle: 270 },
-      { id: 'joint-center', relX: 0, relY: 0, type: 'joint', weight: 0 },
-      { id: 'edge-l1', relX: -1, relY: 0, type: 'edge-h', weight: 1 },
-      { id: 'edge-l2', relX: -1, relY: 1, type: 'edge-v', weight: 1 },
-      { id: 'edge-l3', relX: -2, relY: 1, type: 'edge-h', weight: 1 },
-      { id: 'edge-r1', relX: 1, relY: 0, type: 'edge-h', weight: 1 },
-      { id: 'muscle-l', relX: 0, relY: 0, type: 'muscle-left', weight: 0 },
-    ],
-  },
-  {
-    name: 'Громозев-Многоножка',
-    description: 'Двухшарнирный змей-хищник. Волновое движение позвоночника за счет двух шарниров с мышцами и направляющей лобовой челюсти.',
+    name: 'Бот Хрум-Батон',
+    description: 'Длинный гусеничный бот с двумя шарнирами и прожорливой челюстью на лобовой голове. Волнообразная гибкая траектория движения.',
     color: '#10b981',
     elements: [
       { id: 'head-top', relX: 0, relY: -2, type: 'head', weight: 1, headAngle: 270 },
@@ -347,23 +361,8 @@ export const DEFAULT_PRESETS: { name: string; description: string; color: string
     ],
   },
   {
-    name: 'Хаотичный Френзи-Бот',
-    description: 'Бот со случайными вероятностными мышцами (35% шанс). Совершает непредсказуемые броски и резкие укусы в секторе 60°.',
-    color: '#ec4899',
-    elements: [
-      { id: 'head-top', relX: 0, relY: -1, type: 'head', weight: 1, headAngle: 270 },
-      { id: 'jaw-top', relX: 0, relY: -1, type: 'head-jaw', weight: 0, headAngle: 270 },
-      { id: 'joint-center', relX: 0, relY: 0, type: 'joint', weight: 0 },
-      { id: 'edge-l1', relX: -1, relY: 0, type: 'edge-h', weight: 1 },
-      { id: 'edge-r1', relX: 1, relY: 0, type: 'edge-h', weight: 1 },
-      { id: 'edge-v1', relX: 0, relY: -1, type: 'edge-v', weight: 1 },
-      { id: 'muscle-rnd-l', relX: 0, relY: 0, type: 'muscle-random-left', weight: 0, randomChance: 35 },
-      { id: 'muscle-rnd-r', relX: 0, relY: 0, type: 'muscle-random-right', weight: 0, randomChance: 35 },
-    ],
-  },
-  {
-    name: 'Панцирный Скарабей',
-    description: 'Широкий броне-бот с развитыми распорками, центральным шарниром, двойным балансом и мощным захватом челюстей.',
+    name: 'Бот Пельмень-Убийца',
+    description: 'Широкий панцирный крепыш с мощной хваткой, боковыми ребрами и диагональной защитой. Огромная инерция и сокрушительный укус.',
     color: '#06b6d4',
     elements: [
       { id: 'head-top', relX: 0, relY: -1, type: 'head', weight: 1, headAngle: 270 },
@@ -380,9 +379,56 @@ export const DEFAULT_PRESETS: { name: string; description: string; color: string
     ],
   },
   {
-    name: 'Теневой Сталкер',
-    description: 'Удлиненный стреловидный бот с продольным хребтом, малым лобовым сопротивлением и выдвинутой вперед челюстью.',
+    name: 'Бот Бешеный Шпунтик',
+    description: 'Хаотичный прыгун с вероятностными случайными мышцами (35% шанс сгиба). Непредсказуемые зигзаги и внезапные резкие укусы.',
+    color: '#ec4899',
+    elements: [
+      { id: 'head-top', relX: 0, relY: -1, type: 'head', weight: 1, headAngle: 270 },
+      { id: 'jaw-top', relX: 0, relY: -1, type: 'head-jaw', weight: 0, headAngle: 270 },
+      { id: 'joint-center', relX: 0, relY: 0, type: 'joint', weight: 0 },
+      { id: 'edge-l1', relX: -1, relY: 0, type: 'edge-h', weight: 1 },
+      { id: 'edge-r1', relX: 1, relY: 0, type: 'edge-h', weight: 1 },
+      { id: 'edge-v1', relX: 0, relY: -1, type: 'edge-v', weight: 1 },
+      { id: 'muscle-rnd-l', relX: 0, relY: 0, type: 'muscle-random-left', weight: 0, randomChance: 35 },
+      { id: 'muscle-rnd-r', relX: 0, relY: 0, type: 'muscle-random-right', weight: 0, randomChance: 35 },
+    ],
+  },
+  {
+    name: 'Бот Двуглавый Горыныч',
+    description: 'Уникальный двухголовый дракон с двумя головами и двумя челюстями на раздвоенных шеях. Двойной сектор атаки и мощная хватка.',
+    color: '#8b5cf6',
+    elements: [
+      { id: 'head-l', relX: -1, relY: -1, type: 'head', weight: 1, headAngle: 270 },
+      { id: 'jaw-l', relX: -1, relY: -1, type: 'head-jaw', weight: 0, headAngle: 270 },
+      { id: 'head-r', relX: 1, relY: -1, type: 'head', weight: 1, headAngle: 270 },
+      { id: 'jaw-r', relX: 1, relY: -1, type: 'head-jaw', weight: 0, headAngle: 270 },
+      { id: 'joint-c', relX: 0, relY: 0, type: 'joint', weight: 0 },
+      { id: 'edge-d1', relX: -1, relY: -1, type: 'edge-d2', weight: 1 },
+      { id: 'edge-d2', relX: 1, relY: -1, type: 'edge-d1', weight: 1 },
+      { id: 'edge-v1', relX: 0, relY: 1, type: 'edge-v', weight: 1 },
+      { id: 'muscle-l', relX: 0, relY: 0, type: 'muscle-left', weight: 0 },
+      { id: 'muscle-r', relX: 0, relY: 0, type: 'muscle-right', weight: 0 },
+    ],
+  },
+  {
+    name: 'Бот Вихревой Кусь',
+    description: 'Асимметричный вихревой вертолет со смещенным центром масс. Непрерывно вращается по спирали, нанося круговые удары челюстью.',
     color: '#6366f1',
+    elements: [
+      { id: 'head-top', relX: 0, relY: -1, type: 'head', weight: 1, headAngle: 270 },
+      { id: 'jaw-top', relX: 0, relY: -1, type: 'head-jaw', weight: 0, headAngle: 270 },
+      { id: 'joint-center', relX: 0, relY: 0, type: 'joint', weight: 0 },
+      { id: 'edge-l1', relX: -1, relY: 0, type: 'edge-h', weight: 1 },
+      { id: 'edge-l2', relX: -1, relY: 1, type: 'edge-v', weight: 1 },
+      { id: 'edge-l3', relX: -2, relY: 1, type: 'edge-h', weight: 1 },
+      { id: 'edge-r1', relX: 1, relY: 0, type: 'edge-h', weight: 1 },
+      { id: 'muscle-l', relX: 0, relY: 0, type: 'muscle-left', weight: 0 },
+    ],
+  },
+  {
+    name: 'Бот Тапок-Крушитель',
+    description: 'Тяжелый утюг-таран с двойным вертикальным хребтом и усиленными челюстями. Высокая кинетическая энергия при лобовом столкновении.',
+    color: '#f97316',
     elements: [
       { id: 'head-top', relX: 0, relY: -2, type: 'head', weight: 1, headAngle: 270 },
       { id: 'jaw-top', relX: 0, relY: -2, type: 'head-jaw', weight: 0, headAngle: 270 },
@@ -397,8 +443,8 @@ export const DEFAULT_PRESETS: { name: string; description: string; color: string
     ],
   },
   {
-    name: 'Клещевик-Дробитель',
-    description: 'Широкозахватный бот с массивными боковыми пилонами и мощной челюстью. Оказывает сильное давление в ближнем бою.',
+    name: 'Бот Клещ-Прилипала',
+    description: 'Широкозахватный клещ с боковыми пилонами и мощной челюстью. Зажимает жертву в клешни при сближении.',
     color: '#14b8a6',
     elements: [
       { id: 'head-top', relX: 0, relY: -1, type: 'head', weight: 1, headAngle: 270 },
@@ -411,6 +457,23 @@ export const DEFAULT_PRESETS: { name: string; description: string; color: string
       { id: 'edge-r2', relX: 1, relY: -1, type: 'edge-v', weight: 1 },
       { id: 'muscle-l', relX: 0, relY: 0, type: 'muscle-left', weight: 0 },
       { id: 'muscle-r', relX: 0, relY: 0, type: 'muscle-right', weight: 0 },
+    ],
+  },
+  {
+    name: 'Бот Ночной Кусака',
+    description: 'Ловкий змеевидный охотник со смещенными суставами и острыми зубами. S-образная траектория скольжения и молниеносная наводка.',
+    color: '#a855f7',
+    elements: [
+      { id: 'head-top', relX: 0, relY: -2, type: 'head', weight: 1, headAngle: 270 },
+      { id: 'jaw-top', relX: 0, relY: -2, type: 'head-jaw', weight: 0, headAngle: 270 },
+      { id: 'joint-1', relX: 0, relY: -1, type: 'joint', weight: 0 },
+      { id: 'joint-2', relX: 0, relY: 1, type: 'joint', weight: 0 },
+      { id: 'edge-v1', relX: 0, relY: -2, type: 'edge-v', weight: 1 },
+      { id: 'edge-v2', relX: 0, relY: 0, type: 'edge-v', weight: 1 },
+      { id: 'edge-d1', relX: -1, relY: 0, type: 'edge-d2', weight: 1 },
+      { id: 'edge-d2', relX: 1, relY: 0, type: 'edge-d1', weight: 1 },
+      { id: 'muscle-1', relX: 0, relY: -1, type: 'muscle-left', weight: 0 },
+      { id: 'muscle-2', relX: 0, relY: 1, type: 'muscle-right', weight: 0 },
     ],
   },
 ];

@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 export type LogLevel = 'INFO' | 'WARN' | 'ERROR' | 'FATAL';
-export type LogSource = 'Node' | 'Go' | 'WS' | 'HTTP' | 'System';
+export type LogSource = 'Node' | 'Go' | 'WS' | 'HTTP' | 'System' | 'Admin';
 
 export interface LogEntry {
   id: string;

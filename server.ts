@@ -454,6 +454,53 @@ async function startServer() {
     }
   });
 
+  // Admin Full Server Restart Endpoint
+  app.post('/api/admin/restart-server', async (req, res) => {
+    try {
+      const user = getAuthUser(req);
+      if (!user.isAdmin) {
+        res.status(403).json({ status: 'error', message: 'Доступ запрещен. Требуются права администратора.' });
+        return;
+      }
+
+      serverLogger.info('Admin', `[SERVER RESTART] Admin ${user.username} initiated a full server restart.`);
+
+      // 1. Kick/terminate current Go backend process
+      if (goProcess) {
+        try {
+          goProcess.kill('SIGKILL');
+        } catch (e) {}
+      }
+      killExistingGoServer();
+
+      // 2. Disconnect and kick all active proxied client connections
+      wss.clients.forEach((client) => {
+        try {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({
+              type: 'kicked',
+              kickedReason: 'Сервер полностью перезапущен администратором. Все очки и позиции сброшены.'
+            }));
+          }
+          client.close();
+        } catch (e) {}
+      });
+
+      // 3. Launch fresh Go backend process
+      setTimeout(() => {
+        startGoBackend();
+      }, 600);
+
+      res.json({
+        status: 'ok',
+        message: 'Сервер успешно перезапущен! Все игроки кикнуты, очки и позиции чудиков обнулены. База чудиков сохранена.',
+      });
+    } catch (err: any) {
+      serverLogger.error('Admin', `Server restart failed: ${err.message}`);
+      res.status(500).json({ status: 'error', message: err.message });
+    }
+  });
+
   // Health endpoint
   app.get('/api/health', (req, res) => {
     res.json({

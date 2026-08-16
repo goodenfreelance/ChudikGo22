@@ -91,6 +91,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [spawnPresetIdx, setSpawnPresetIdx] = useState<number>(0);
   const [showSpawnModal, setShowSpawnModal] = useState<boolean>(false);
   const [spawnToast, setSpawnToast] = useState<string | null>(null);
+  const [isRestartingServer, setIsRestartingServer] = useState<boolean>(false);
+  const [showRestartConfirmModal, setShowRestartConfirmModal] = useState<boolean>(false);
 
   // All User Creatures in Database (Admin Access)
   const [dbCreatures, setDbCreatures] = useState<SavedPreset[]>([]);
@@ -199,11 +201,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  // 1-Click Spawn Random Bots into random wild locations with random orientations
+  // 1-Click Spawn Random Bots into random wild locations with random orientations and non-overlapping check
   const handleSpawnRandomBots = (count: number = 1) => {
+    const currentCreaturesList = [...creatures];
     for (let i = 0; i < count; i++) {
       const preset = DEFAULT_PRESETS[Math.floor(Math.random() * DEFAULT_PRESETS.length)];
-      const { x, y, angleDeg } = getRandomWildFieldSpawn(worldRadius);
+      const { x, y, angleDeg } = getRandomWildFieldSpawn(worldRadius, currentCreaturesList);
+      currentCreaturesList.push({ id: `temp-${i}`, x, y } as any);
       gameWs.sendAdminSpawnCreature(preset.name, preset.color, preset.elements, x, y, angleDeg, true);
     }
     showToast(count === 1 ? '🎲 +1 Бот заспавнен в диком поле!' : `⚡ Заспавнено ботов: ${count} в диком поле!`);
@@ -211,17 +215,48 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   // 1-Click Spawn a specific rule-compliant Bot Preset
   const handleSpawnSpecificBot = (preset: typeof DEFAULT_PRESETS[0]) => {
-    const { x, y, angleDeg } = getRandomWildFieldSpawn(worldRadius);
+    const { x, y, angleDeg } = getRandomWildFieldSpawn(worldRadius, creatures);
     gameWs.sendAdminSpawnCreature(preset.name, preset.color, preset.elements, x, y, angleDeg, true);
     showToast(`🤖 «${preset.name}» заспавнен в диком поле!`);
   };
 
   const handleSpawnCreature = () => {
     const preset = DEFAULT_PRESETS[spawnPresetIdx] || DEFAULT_PRESETS[0];
-    const { x, y, angleDeg } = getRandomWildFieldSpawn(worldRadius);
+    const { x, y, angleDeg } = getRandomWildFieldSpawn(worldRadius, creatures);
     gameWs.sendAdminSpawnCreature(spawnName, spawnColor, preset.elements, x, y, angleDeg, true);
     setShowSpawnModal(false);
     showToast(`✅ Создан чудик «${spawnName}» в диком поле!`);
+  };
+
+  const handleFullServerRestart = async () => {
+    setIsRestartingServer(true);
+    setShowRestartConfirmModal(false);
+    try {
+      // 1. Send WebSocket notification to trigger room ResetWorld & kick clients
+      gameWs.sendAdminRestartServer('Сервер полностью перезапущен администратором. Все очки и позиции сброшены.');
+
+      // 2. Trigger backend process restart if token available
+      if (token) {
+        try {
+          await fetch('/api/admin/restart-server', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+          });
+        } catch (e) {
+          // If HTTP call is interrupted due to process restart, it's expected
+        }
+      }
+
+      showToast('🚀 Сервер успешно перезапущен! Все игроки кикнуты, очки обнулены.');
+    } catch (err: any) {
+      console.error('Server restart error:', err);
+      showToast('❌ Ошибка при перезапуске сервера');
+    } finally {
+      setIsRestartingServer(false);
+    }
   };
 
   const handleAdminDeleteDbCreature = async (id: string, name: string) => {
@@ -568,22 +603,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div className="grid grid-cols-2 gap-2 pt-1">
                     <button
                       onClick={() => setShowSpawnModal(true)}
-                      className="py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg flex items-center justify-center gap-1.5 transition text-xs"
+                      className="py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg flex items-center justify-center gap-1.5 transition text-xs shadow-sm"
                     >
                       <PlusCircle className="w-3.5 h-3.5" />
-                      Кастомный чудик
+                      Добавить чудика
                     </button>
 
-                    {onRestartPlayer && (
-                      <button
-                        onClick={onRestartPlayer}
-                        className="py-2 bg-rose-600/90 hover:bg-rose-600 text-white font-bold rounded-lg flex items-center justify-center gap-1.5 transition border border-rose-500/50 shadow-sm cursor-pointer text-xs"
-                        title="Обнуляет состояние игрока и возрождает заново на Базе"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5" />
-                        Рестарт на Базе
-                      </button>
-                    )}
+                    <button
+                      onClick={() => setShowRestartConfirmModal(true)}
+                      disabled={isRestartingServer}
+                      className="py-2 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white font-bold rounded-lg flex items-center justify-center gap-1.5 transition border border-red-400/50 shadow-md cursor-pointer text-xs disabled:opacity-50"
+                      title="Полный перезапуск сервера: кикает всех игроков, обнуляет очки и позиции, сохраняя базу данных чудиков"
+                    >
+                      <RotateCcw className={`w-3.5 h-3.5 ${isRestartingServer ? 'animate-spin' : ''}`} />
+                      {isRestartingServer ? 'Рестарт...' : 'Перезапуск сервера'}
+                    </button>
                   </div>
                 </div>
 
@@ -637,41 +671,41 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-amber-300 flex items-center gap-1.5 text-xs">
                       <Bot className="w-4 h-4 text-amber-400" />
-                      Боты с головами и челюстями (8 пресетов)
+                      10 типов ботов (с головами и челюстями)
                     </span>
                     <span className="text-[10px] text-amber-400/90 font-mono font-semibold">
-                      🤖 Автономный AI
+                      🎯 Наведение: 15 клеток
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-300 leading-tight">
-                    Каждый бот соблюдает правила игры (голова + челюсти), охотится на еду и мелких чудиков, спавнится в случайной точке дикого поля со случайным углом.
+                    Боты различаются по массе, скорости и траектории движения. Каждый бот оснащен головой с челюстями и самонаводится на ближайшего игрока в радиусе 15 клеток.
                   </p>
 
                   <div className="grid grid-cols-4 gap-1.5 pt-1">
                     <button
                       onClick={() => handleSpawnRandomBots(1)}
-                      className="py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg flex items-center justify-center gap-1 text-[10px] transition active:scale-95"
+                      className="py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg flex items-center justify-center gap-1 text-[10px] transition active:scale-95 shadow"
                     >
                       <Dices className="w-3 h-3" />
                       +1 Рандом
                     </button>
                     <button
                       onClick={() => handleSpawnRandomBots(3)}
-                      className="py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg flex items-center justify-center gap-1 text-[10px] transition active:scale-95"
+                      className="py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg flex items-center justify-center gap-1 text-[10px] transition active:scale-95 shadow"
                     >
                       <Zap className="w-3 h-3" />
                       +3 Бота
                     </button>
                     <button
                       onClick={() => handleSpawnRandomBots(5)}
-                      className="py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg flex items-center justify-center gap-1 text-[10px] transition active:scale-95"
+                      className="py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg flex items-center justify-center gap-1 text-[10px] transition active:scale-95 shadow"
                     >
                       <Sparkles className="w-3 h-3" />
                       +5 Ботов
                     </button>
                     <button
                       onClick={() => handleSpawnRandomBots(10)}
-                      className="py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg flex items-center justify-center gap-1 text-[10px] transition active:scale-95"
+                      className="py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg flex items-center justify-center gap-1 text-[10px] transition active:scale-95 shadow"
                     >
                       <Layers className="w-3 h-3" />
                       +10 Ботов
@@ -679,13 +713,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                 </div>
 
-                {/* List of 8 unique bots */}
+                {/* List of 10 unique humorous bots */}
                 <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
                   {DEFAULT_PRESETS.map((preset, idx) => {
-                    const mouthCount = preset.elements.filter((e) => e.type === 'mouth').length;
+                    const jawCount = preset.elements.filter((e) => e.type === 'head-jaw').length;
                     const headCount = preset.elements.filter((e) => e.type === 'head').length;
-                    const muscleCount = preset.elements.filter((e) => e.type === 'muscle').length;
-                    const boneCount = preset.elements.filter((e) => e.type === 'bone').length;
+                    const muscleCount = preset.elements.filter((e) => e.type.startsWith('muscle')).length;
+                    const boneCount = preset.elements.filter((e) => e.type.startsWith('edge')).length;
 
                     return (
                       <div
@@ -699,10 +733,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               style={{ backgroundColor: preset.color }}
                             />
                             <div>
-                              <div className="font-bold text-slate-100 text-xs flex items-center gap-1.5">
-                                {preset.name}
+                              <div className="font-bold text-slate-100 text-xs flex items-center gap-1.5 flex-wrap">
+                                <span>{preset.name}</span>
                                 <span className="px-1.5 py-0.2 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 rounded text-[9px] font-semibold">
-                                  🛡️ {headCount} Голова + 🦷 {mouthCount} Челюсти
+                                  🛡️ {headCount} Голов{headCount > 1 ? 'ы' : 'а'} + 🦷 {jawCount} Челюст{jawCount > 1 ? 'и' : 'ь'}
                                 </span>
                               </div>
                               <div className="text-[10px] text-slate-400 mt-0.5">
@@ -715,7 +749,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         <div className="flex items-center justify-between border-t border-slate-700/50 pt-2">
                           <div className="text-[10px] text-slate-400 flex items-center gap-2">
                             <span>Элементов: <strong className="text-slate-200">{preset.elements.length}</strong></span>
-                            <span>(💪{muscleCount} мышц, 🦴{boneCount} костей)</span>
+                            <span>(💪{muscleCount} мышц, 🦴{boneCount} ребер)</span>
                           </div>
 
                           <button
@@ -1206,91 +1240,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 )}
               </div>
             )}
-          </div>
-        )}
-      </div>
-
-      {/* Spawn Creature Modal */}
-      {showSpawnModal && (
-        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-amber-500/50 text-white p-5 rounded-2xl max-w-sm w-full space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-700 pb-2">
-              <h3 className="font-bold text-amber-400 flex items-center gap-2">
-                <PlusCircle className="w-5 h-5" />
-                Создание чудика в диком поле
-              </h3>
-              <button
-                onClick={() => setShowSpawnModal(false)}
-                className="text-slate-400 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block text-slate-300 mb-1 font-semibold">Имя:</label>
-                <input
-                  type="text"
-                  value={spawnName}
-                  onChange={(e) => setSpawnName(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-300 mb-1 font-semibold">Цвет:</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={spawnColor}
-                    onChange={(e) => setSpawnColor(e.target.value)}
-                    className="w-10 h-8 rounded border border-slate-700 bg-transparent cursor-pointer"
-                  />
-                  <span className="font-mono text-slate-400">{spawnColor}</span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-300 mb-1 font-semibold">Пресет анатомии:</label>
-                <select
-                  value={spawnPresetIdx}
-                  onChange={(e) => setSpawnPresetIdx(Number(e.target.value))}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-                >
-                  {DEFAULT_PRESETS.map((p, idx) => (
-                    <option key={idx} value={idx}>
-                      {p.name} ({p.elements.length} элементов)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-300 text-[11px]">
-                📍 Чудик появится в случайной точке дикого поля (за пределами базы) со случайным углом поворота.
-              </div>
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <button
-                onClick={() => setShowSpawnModal(false)}
-                className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold rounded-lg"
-              >
-                Отмена
-              </button>
-              <button
-                onClick={handleSpawnCreature}
-                className="flex-1 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg"
-              >
-                Спавнить в поле
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-};
 
             {/* TAB: All User Creatures in DB (Admin Exclusive) */}
             {activeTab === 'db_creatures' && (
@@ -2132,6 +2081,59 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 className="flex-1 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg"
               >
                 Спавнить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full Server Restart Confirmation Modal */}
+      {showRestartConfirmModal && (
+        <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-2 border-red-500 text-white p-6 rounded-2xl max-w-md w-full space-y-4 shadow-2xl animate-fadeIn">
+            <div className="flex items-center gap-3 text-red-400 border-b border-slate-700/80 pb-3">
+              <RotateCcw className="w-6 h-6 text-red-500 animate-spin-slow" />
+              <h3 className="font-bold text-base text-red-200">
+                Полный перезапуск сервера
+              </h3>
+            </div>
+
+            <div className="space-y-3 text-xs text-slate-300">
+              <p className="text-slate-200 font-semibold">
+                Вы действительно хотите выполнить полный перезапуск сервера игры?
+              </p>
+              
+              <div className="bg-red-950/40 border border-red-500/40 rounded-xl p-3 space-y-2 text-[11px] text-red-200">
+                <div className="flex items-center gap-2">
+                  <span className="text-red-400 font-bold">•</span>
+                  <span><strong>Кик всех игроков:</strong> Все подключенные клиенты отключаются с уведомлением о перезапуске.</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-red-400 font-bold">•</span>
+                  <span><strong>Обнуление очков и позиций:</strong> Текущие очки, набранная еда и координаты чудиков в игровом мире сбрасываются до нуля.</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-emerald-400 font-bold">✓</span>
+                  <span><strong>База чудиков сохраняется:</strong> Все сохраненные чудики и аккаунты игроков в БД остаются в полной безопасности.</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setShowRestartConfirmModal(false)}
+                disabled={isRestartingServer}
+                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs transition"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleFullServerRestart}
+                disabled={isRestartingServer}
+                className="flex-1 py-2.5 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-red-900/50 transition disabled:opacity-50"
+              >
+                <RotateCcw className={`w-4 h-4 ${isRestartingServer ? 'animate-spin' : ''}`} />
+                <span>{isRestartingServer ? 'Перезапуск...' : 'Да, перезапустить'}</span>
               </button>
             </div>
           </div>

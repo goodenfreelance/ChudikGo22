@@ -15,8 +15,8 @@ var DefaultPresets = []struct {
 	Elements    []CreatureElement `json:"elements"`
 }{
 	{
-		Name:        "Жнец-Крушитель",
-		Description: "Тяжёлый бронированный бот-крушитель. Массивный панцирь с тяжелыми рёбрами, центральный шарнир и сокрушительная хищная челюсть на лобовой голове.",
+		Name:        "Бот Зубастый Колобок",
+		Description: "Тяжёлый бронированный шар с двойным запасом челюстей и мощным тараном. Высокая масса, устойчивость к ударам.",
 		Elements: []CreatureElement{
 			{ID: "head-top", RelX: 0, RelY: -1, Type: ElementHead, Weight: 1, HeadAngle: floatPtr(270)},
 			{ID: "jaw-top", RelX: 0, RelY: -1, Type: ElementHeadJaw, Weight: 0, HeadAngle: floatPtr(270)},
@@ -32,8 +32,8 @@ var DefaultPresets = []struct {
 		},
 	},
 	{
-		Name:        "Молниеносный Кусач",
-		Description: "Сверхлегкий скоростной бот. Диагональные ребра (/) и (\\) под 45°, ведущая голова с острой челюстью и высокочастотные мышцы. Быстрые рывки и охота за добычей.",
+		Name:        "Бот Шнырь-Торпеда",
+		Description: "Сверхскоростной лёгкий бот-стрела. Диагональные ребра под 45°, острая челюсть и высокочастотные мышцы. Мгновенные рывки к цели.",
 		Elements: []CreatureElement{
 			{ID: "head-top", RelX: 0, RelY: -1, Type: ElementHead, Weight: 1, HeadAngle: floatPtr(270)},
 			{ID: "jaw-top", RelX: 0, RelY: -1, Type: ElementHeadJaw, Weight: 0, HeadAngle: floatPtr(270)},
@@ -47,22 +47,8 @@ var DefaultPresets = []struct {
 		},
 	},
 	{
-		Name:        "Вихревой Жвалоног",
-		Description: "Асимметричный хищный бот. Смещенный центр масс создает постоянное вихревое вращение и круговую атаку челюстью по спирали.",
-		Elements: []CreatureElement{
-			{ID: "head-top", RelX: 0, RelY: -1, Type: ElementHead, Weight: 1, HeadAngle: floatPtr(270)},
-			{ID: "jaw-top", RelX: 0, RelY: -1, Type: ElementHeadJaw, Weight: 0, HeadAngle: floatPtr(270)},
-			{ID: "joint-center", RelX: 0, RelY: 0, Type: ElementJoint, Weight: 0},
-			{ID: "edge-l1", RelX: -1, RelY: 0, Type: ElementEdgeH, Weight: 1},
-			{ID: "edge-l2", RelX: -1, RelY: 1, Type: ElementEdgeV, Weight: 1},
-			{ID: "edge-l3", RelX: -2, RelY: 1, Type: ElementEdgeH, Weight: 1},
-			{ID: "edge-r1", RelX: 1, RelY: 0, Type: ElementEdgeH, Weight: 1},
-			{ID: "muscle-l", RelX: 0, RelY: 0, Type: ElementMuscleLeft, Weight: 0},
-		},
-	},
-	{
-		Name:        "Громозев-Многоножка",
-		Description: "Двухшарнирный хищник. Волновое движение позвоночника за счет двух синхронизированных шарниров с мышцами и направляющей головной челюсти.",
+		Name:        "Бот Хрум-Батон",
+		Description: "Длинный гусеничный бот с двумя шарнирами и прожорливой челюстью на лобовой голове. Волнообразная гибкая траектория движения.",
 		Elements: []CreatureElement{
 			{ID: "head-top", RelX: 0, RelY: -2, Type: ElementHead, Weight: 1, HeadAngle: floatPtr(270)},
 			{ID: "jaw-top", RelX: 0, RelY: -2, Type: ElementHeadJaw, Weight: 0, HeadAngle: floatPtr(270)},
@@ -79,22 +65,8 @@ var DefaultPresets = []struct {
 		},
 	},
 	{
-		Name:        "Хаотичный Френзи-Бот",
-		Description: "Бот с вероятностными случайными мышцами (35% шанс сгиба). Совершает внезапные судорожные рывки и резкие укусы в секторе 60°.",
-		Elements: []CreatureElement{
-			{ID: "head-top", RelX: 0, RelY: -1, Type: ElementHead, Weight: 1, HeadAngle: floatPtr(270)},
-			{ID: "jaw-top", RelX: 0, RelY: -1, Type: ElementHeadJaw, Weight: 0, HeadAngle: floatPtr(270)},
-			{ID: "joint-center", RelX: 0, RelY: 0, Type: ElementJoint, Weight: 0},
-			{ID: "edge-l1", RelX: -1, RelY: 0, Type: ElementEdgeH, Weight: 1},
-			{ID: "edge-r1", RelX: 1, RelY: 0, Type: ElementEdgeH, Weight: 1},
-			{ID: "edge-v1", RelX: 0, RelY: -1, Type: ElementEdgeV, Weight: 1},
-			{ID: "muscle-rnd-l", RelX: 0, RelY: 0, Type: ElementMuscleRandomLeft, Weight: 0, RandomChance: floatPtr(35)},
-			{ID: "muscle-rnd-r", RelX: 0, RelY: 0, Type: ElementMuscleRandomRight, Weight: 0, RandomChance: floatPtr(35)},
-		},
-	},
-	{
-		Name:        "Панцирный Скарабей",
-		Description: "Широкий броне-бот с развитыми боковыми распорками, центральным шарниром, двойным балансом и мощным захватом челюстей.",
+		Name:        "Бот Пельмень-Убийца",
+		Description: "Широкий панцирный крепыш с мощной хваткой, боковыми ребрами и диагональной защитой. Огромная инерция и сокрушительный укус.",
 		Elements: []CreatureElement{
 			{ID: "head-top", RelX: 0, RelY: -1, Type: ElementHead, Weight: 1, HeadAngle: floatPtr(270)},
 			{ID: "jaw-top", RelX: 0, RelY: -1, Type: ElementHeadJaw, Weight: 0, HeadAngle: floatPtr(270)},
@@ -110,8 +82,52 @@ var DefaultPresets = []struct {
 		},
 	},
 	{
-		Name:        "Теневой Сталкер",
-		Description: "Удлиненный стреловидный бот с продольным хребтом, малым лобовым сопротивлением и выдвинутой вперед смертоносной челюстью.",
+		Name:        "Бот Бешеный Шпунтик",
+		Description: "Хаотичный прыгун с вероятностными случайными мышцами (35% шанс сгиба). Непредсказуемые зигзаги и внезапные резкие укусы.",
+		Elements: []CreatureElement{
+			{ID: "head-top", RelX: 0, RelY: -1, Type: ElementHead, Weight: 1, HeadAngle: floatPtr(270)},
+			{ID: "jaw-top", RelX: 0, RelY: -1, Type: ElementHeadJaw, Weight: 0, HeadAngle: floatPtr(270)},
+			{ID: "joint-center", RelX: 0, RelY: 0, Type: ElementJoint, Weight: 0},
+			{ID: "edge-l1", RelX: -1, RelY: 0, Type: ElementEdgeH, Weight: 1},
+			{ID: "edge-r1", RelX: 1, RelY: 0, Type: ElementEdgeH, Weight: 1},
+			{ID: "edge-v1", RelX: 0, RelY: -1, Type: ElementEdgeV, Weight: 1},
+			{ID: "muscle-rnd-l", RelX: 0, RelY: 0, Type: ElementMuscleRandomLeft, Weight: 0, RandomChance: floatPtr(35)},
+			{ID: "muscle-rnd-r", RelX: 0, RelY: 0, Type: ElementMuscleRandomRight, Weight: 0, RandomChance: floatPtr(35)},
+		},
+	},
+	{
+		Name:        "Бот Двуглавый Горыныч",
+		Description: "Уникальный двухголовый дракон с двумя головами и двумя челюстями на раздвоенных шеях. Двойной сектор атаки и мощная хватка.",
+		Elements: []CreatureElement{
+			{ID: "head-l", RelX: -1, RelY: -1, Type: ElementHead, Weight: 1, HeadAngle: floatPtr(270)},
+			{ID: "jaw-l", RelX: -1, RelY: -1, Type: ElementHeadJaw, Weight: 0, HeadAngle: floatPtr(270)},
+			{ID: "head-r", RelX: 1, RelY: -1, Type: ElementHead, Weight: 1, HeadAngle: floatPtr(270)},
+			{ID: "jaw-r", RelX: 1, RelY: -1, Type: ElementHeadJaw, Weight: 0, HeadAngle: floatPtr(270)},
+			{ID: "joint-c", RelX: 0, RelY: 0, Type: ElementJoint, Weight: 0},
+			{ID: "edge-d1", RelX: -1, RelY: -1, Type: ElementEdgeD2, Weight: 1},
+			{ID: "edge-d2", RelX: 1, RelY: -1, Type: ElementEdgeD1, Weight: 1},
+			{ID: "edge-v1", RelX: 0, RelY: 1, Type: ElementEdgeV, Weight: 1},
+			{ID: "muscle-l", RelX: 0, RelY: 0, Type: ElementMuscleLeft, Weight: 0},
+			{ID: "muscle-r", RelX: 0, RelY: 0, Type: ElementMuscleRight, Weight: 0},
+		},
+	},
+	{
+		Name:        "Бот Вихревой Кусь",
+		Description: "Асимметричный вихревой вертолет со смещенным центром масс. Непрерывно вращается по спирали, нанося круговые удары челюстью.",
+		Elements: []CreatureElement{
+			{ID: "head-top", RelX: 0, RelY: -1, Type: ElementHead, Weight: 1, HeadAngle: floatPtr(270)},
+			{ID: "jaw-top", RelX: 0, RelY: -1, Type: ElementHeadJaw, Weight: 0, HeadAngle: floatPtr(270)},
+			{ID: "joint-center", RelX: 0, RelY: 0, Type: ElementJoint, Weight: 0},
+			{ID: "edge-l1", RelX: -1, RelY: 0, Type: ElementEdgeH, Weight: 1},
+			{ID: "edge-l2", RelX: -1, RelY: 1, Type: ElementEdgeV, Weight: 1},
+			{ID: "edge-l3", RelX: -2, RelY: 1, Type: ElementEdgeH, Weight: 1},
+			{ID: "edge-r1", RelX: 1, RelY: 0, Type: ElementEdgeH, Weight: 1},
+			{ID: "muscle-l", RelX: 0, RelY: 0, Type: ElementMuscleLeft, Weight: 0},
+		},
+	},
+	{
+		Name:        "Бот Тапок-Крушитель",
+		Description: "Тяжелый утюг-таран с двойным вертикальным хребтом и усиленными челюстями. Высокая кинетическая энергия при лобовом столкновении.",
 		Elements: []CreatureElement{
 			{ID: "head-top", RelX: 0, RelY: -2, Type: ElementHead, Weight: 1, HeadAngle: floatPtr(270)},
 			{ID: "jaw-top", RelX: 0, RelY: -2, Type: ElementHeadJaw, Weight: 0, HeadAngle: floatPtr(270)},
@@ -126,8 +142,8 @@ var DefaultPresets = []struct {
 		},
 	},
 	{
-		Name:        "Клещевик-Дробитель",
-		Description: "Широкозахватный бот с массивными боковыми пилонами и мощной челюстью. Оказывает сильное давление в ближнем бою.",
+		Name:        "Бот Клещ-Прилипала",
+		Description: "Широкозахватный клещ с боковыми пилонами и мощной челюстью. Зажимает жертву в клешни при сближении.",
 		Elements: []CreatureElement{
 			{ID: "head-top", RelX: 0, RelY: -1, Type: ElementHead, Weight: 1, HeadAngle: floatPtr(270)},
 			{ID: "jaw-top", RelX: 0, RelY: -1, Type: ElementHeadJaw, Weight: 0, HeadAngle: floatPtr(270)},
@@ -139,6 +155,22 @@ var DefaultPresets = []struct {
 			{ID: "edge-r2", RelX: 1, RelY: -1, Type: ElementEdgeV, Weight: 1},
 			{ID: "muscle-l", RelX: 0, RelY: 0, Type: ElementMuscleLeft, Weight: 0},
 			{ID: "muscle-r", RelX: 0, RelY: 0, Type: ElementMuscleRight, Weight: 0},
+		},
+	},
+	{
+		Name:        "Бот Ночной Кусака",
+		Description: "Ловкий змеевидный охотник со смещенными суставами и острыми зубами. S-образная траектория скольжения и молниеносная наводка.",
+		Elements: []CreatureElement{
+			{ID: "head-top", RelX: 0, RelY: -2, Type: ElementHead, Weight: 1, HeadAngle: floatPtr(270)},
+			{ID: "jaw-top", RelX: 0, RelY: -2, Type: ElementHeadJaw, Weight: 0, HeadAngle: floatPtr(270)},
+			{ID: "joint-1", RelX: 0, RelY: -1, Type: ElementJoint, Weight: 0},
+			{ID: "joint-2", RelX: 0, RelY: 1, Type: ElementJoint, Weight: 0},
+			{ID: "edge-v1", RelX: 0, RelY: -2, Type: ElementEdgeV, Weight: 1},
+			{ID: "edge-v2", RelX: 0, RelY: 0, Type: ElementEdgeV, Weight: 1},
+			{ID: "edge-d1", RelX: -1, RelY: 0, Type: ElementEdgeD2, Weight: 1},
+			{ID: "edge-d2", RelX: 1, RelY: 0, Type: ElementEdgeD1, Weight: 1},
+			{ID: "muscle-1", RelX: 0, RelY: -1, Type: ElementMuscleLeft, Weight: 0},
+			{ID: "muscle-2", RelX: 0, RelY: 1, Type: ElementMuscleRight, Weight: 0},
 		},
 	},
 }

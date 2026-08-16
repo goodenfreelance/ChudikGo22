@@ -18,50 +18,22 @@ func NewBotController() *BotController {
 	}
 }
 
-func (bc *BotController) CreateBot(id, name, color string, presetIdx int, startX, startY float64) Creature {
-	preset := DefaultPresets[presetIdx%len(DefaultPresets)]
-	elements := make([]CreatureElement, len(preset.Elements))
-	copy(elements, preset.Elements)
-
-	forces := CalculatePhysicsForces(elements, 0)
-	angle := DetermineCreatureHeadAngle(elements)
-
-	return Creature{
-		ID:             id,
-		PlayerID:       "bot-" + id,
-		Name:           name,
-		Color:          color,
-		IsBot:          true,
-		X:              startX,
-		Y:              startY,
-		AngleDeg:       angle,
-		TargetAngleDeg: angle,
-		TargetX:        startX,
-		TargetY:        startY,
-		Energy:         120,
-		MaxEnergy:      180,
-		FoodEaten:      0,
-		Score:          100,
-		StepsCount:     0,
-		MuscleStep:     0,
-		State:          "hunting",
-		Elements:       elements,
-		Forces:         forces,
-		PrevX:          startX,
-		PrevY:          startY,
-		PrevAngleDeg:   angle,
-		Kills:          0,
-		LastActive:     time.Now(),
-	}
-}
-
 var BotNames = []string{
-	"Жнец-Крушитель", "Молниеносный Кусач", "Вихревой Жвалоног", "Громозев-Многоножка",
-	"Хаотичный Френзи-Бот", "Панцирный Скарабей", "Теневой Сталкер", "Клещевик-Дробитель",
+	"Бот Зубастый Колобок",
+	"Бот Шнырь-Торпеда",
+	"Бот Хрум-Батон",
+	"Бот Пельмень-Убийца",
+	"Бот Бешеный Шпунтик",
+	"Бот Двуглавый Горыныч",
+	"Бот Вихревой Кусь",
+	"Бот Тапок-Крушитель",
+	"Бот Клещ-Прилипала",
+	"Бот Ночной Кусака",
 }
 
 var BotColors = []string{
-	"#ef4444", "#f59e0b", "#8b5cf6", "#10b981", "#ec4899", "#06b6d4", "#6366f1", "#14b8a6",
+	"#ef4444", "#f59e0b", "#10b981", "#06b6d4", "#ec4899",
+	"#8b5cf6", "#6366f1", "#f97316", "#14b8a6", "#a855f7",
 }
 
 func (bc *BotController) CreateBot(id, name, color string, presetIdx int, startX, startY float64) Creature {
@@ -86,9 +58,9 @@ func (bc *BotController) CreateBot(id, name, color string, presetIdx int, startX
 		TargetY:        startY,
 		Energy:         150,
 		MaxEnergy:      200,
-		FoodEaten:      25,
-		BankFood:       25,
-		Score:          125,
+		FoodEaten:      30,
+		BankFood:       30,
+		Score:          150,
 		StepsCount:     0,
 		MuscleStep:     0,
 		State:          "hunting",
@@ -103,32 +75,37 @@ func (bc *BotController) CreateBot(id, name, color string, presetIdx int, startX
 }
 
 func (bc *BotController) UpdateBot(bot *Creature, foods []Food, creatures []Creature) {
-	// 1. Look for nearest food
-	var closestFood *Food
-	minFoodDistSq := math.Inf(1)
+	// 1. Priority 1: Auto-targeting on nearest human player within 15 cells radius
+	var targetPlayer *Creature
+	minPlayerDistSq := math.Inf(1)
+	const autoTargetRadius = 15.0
+	const autoTargetRadiusSq = autoTargetRadius * autoTargetRadius // 225.0
 
-	for i := range foods {
-		f := &foods[i]
-		dx := f.X - bot.X
+	for i := range creatures {
+		c := &creatures[i]
+		if c.ID == bot.ID || c.IsBot || c.InBase || c.IsInvulnerable {
+			continue
+		}
+		dx := c.X - bot.X
 		if dx > 50.0 {
 			dx -= 100.0
 		} else if dx < -50.0 {
 			dx += 100.0
 		}
-		dy := f.Y - bot.Y
+		dy := c.Y - bot.Y
 		if dy > 50.0 {
 			dy -= 100.0
 		} else if dy < -50.0 {
 			dy += 100.0
 		}
 		dSq := dx*dx + dy*dy
-		if dSq < minFoodDistSq {
-			minFoodDistSq = dSq
-			closestFood = f
+		if dSq <= autoTargetRadiusSq && dSq < minPlayerDistSq {
+			minPlayerDistSq = dSq
+			targetPlayer = c
 		}
 	}
 
-	// 2. Scan for other creatures: identify predators vs prey
+	// 2. Scan for threats (e.g. much larger players) vs other prey
 	var threatCreature *Creature
 	var preyCreature *Creature
 	minThreatDistSq := math.Inf(1)
@@ -153,14 +130,12 @@ func (bc *BotController) UpdateBot(bot *Creature, foods []Food, creatures []Crea
 		}
 		dSq := dx*dx + dy*dy
 
-		// If other creature is larger or invulnerable -> threat!
-		if (c.Score > bot.Score+15 || c.IsInvulnerable) && dSq < 64.0 {
+		if (c.Score > bot.Score+40 || c.IsInvulnerable) && dSq < 64.0 {
 			if dSq < minThreatDistSq {
 				minThreatDistSq = dSq
 				threatCreature = c
 			}
-		} else if c.Score <= bot.Score && dSq < 100.0 && !c.IsInvulnerable {
-			// Smaller creature with jaw attack potential
+		} else if c.Score <= bot.Score && dSq < 100.0 && !c.IsInvulnerable && !c.InBase {
 			if dSq < minPreyDistSq {
 				minPreyDistSq = dSq
 				preyCreature = c
@@ -168,11 +143,43 @@ func (bc *BotController) UpdateBot(bot *Creature, foods []Food, creatures []Crea
 		}
 	}
 
+	// 3. Scan for food
+	var closestFood *Food
+	minFoodDistSq := math.Inf(1)
+	for i := range foods {
+		f := &foods[i]
+		dx := f.X - bot.X
+		if dx > 50.0 {
+			dx -= 100.0
+		} else if dx < -50.0 {
+			dx += 100.0
+		}
+		dy := f.Y - bot.Y
+		if dy > 50.0 {
+			dy -= 100.0
+		} else if dy < -50.0 {
+			dy += 100.0
+		}
+		dSq := dx*dx + dy*dy
+		if dSq < minFoodDistSq {
+			minFoodDistSq = dSq
+			closestFood = f
+		}
+	}
+
 	targetX := bot.X
 	targetY := bot.Y
 	shouldDash := false
 
-	if threatCreature != nil {
+	if targetPlayer != nil {
+		// Auto-targeting actively locked on human player in 15 cells!
+		targetX = targetPlayer.X
+		targetY = targetPlayer.Y
+		bot.State = "hunting"
+		if bot.FoodEaten >= 5 && minPlayerDistSq < 20.0 {
+			shouldDash = true
+		}
+	} else if threatCreature != nil {
 		// Evade threat
 		dx := bot.X - threatCreature.X
 		dy := bot.Y - threatCreature.Y
@@ -183,7 +190,7 @@ func (bc *BotController) UpdateBot(bot *Creature, foods []Food, creatures []Crea
 			shouldDash = true
 		}
 	} else if preyCreature != nil && minPreyDistSq < 64.0 {
-		// Hunt prey creature to bite with jaw!
+		// Hunt smaller creature
 		targetX = preyCreature.X
 		targetY = preyCreature.Y
 		bot.State = "hunting"
@@ -191,7 +198,7 @@ func (bc *BotController) UpdateBot(bot *Creature, foods []Food, creatures []Crea
 			shouldDash = true
 		}
 	} else if closestFood != nil && minFoodDistSq < 400.0 {
-		// Hunt food
+		// Hunt nearest food
 		targetX = closestFood.X
 		targetY = closestFood.Y
 		bot.State = "hunting"
@@ -199,7 +206,7 @@ func (bc *BotController) UpdateBot(bot *Creature, foods []Food, creatures []Crea
 			shouldDash = true
 		}
 	} else {
-		// Wander randomly
+		// Wander with variety
 		if bc.rnd.Float64() < 0.08 {
 			rad := bc.rnd.Float64() * math.Pi * 2
 			targetX = bot.X + math.Cos(rad)*15.0
@@ -214,7 +221,7 @@ func (bc *BotController) UpdateBot(bot *Creature, foods []Food, creatures []Crea
 	bot.TargetY = targetY
 	bot.IsDashing = shouldDash
 
-	// Calculate target angle
+	// Calculate target steering angle
 	dx := targetX - bot.X
 	dy := targetY - bot.Y
 	if math.Hypot(dx, dy) > 0.1 {
@@ -226,13 +233,18 @@ func (bc *BotController) UpdateBot(bot *Creature, foods []Food, creatures []Crea
 		bot.TargetAngleDeg = targetAngle
 	}
 
-	// Muscle flex cycle with variety based on bot preset/style
+	// Distinct muscle flex rhythms and trajectories across bot types
 	flexRate := 0.45
-	if strings.Contains(bot.Name, "Молниеносный") || strings.Contains(bot.Name, "Френзи") {
-		flexRate = 0.85
-	} else if strings.Contains(bot.Name, "Жнец") || strings.Contains(bot.Name, "Скарабей") {
-		flexRate = 0.30
+	if strings.Contains(bot.Name, "Торпеда") || strings.Contains(bot.Name, "Шпунтик") {
+		flexRate = 0.85 // Ultra-fast propulsion & twitchy bursts
+	} else if strings.Contains(bot.Name, "Колобок") || strings.Contains(bot.Name, "Тапок") || strings.Contains(bot.Name, "Пельмень") {
+		flexRate = 0.30 // Heavy steady pacing
+	} else if strings.Contains(bot.Name, "Вихревой") {
+		flexRate = 0.65 // Asymmetrical spinning cadence
+	} else if strings.Contains(bot.Name, "Горыныч") || strings.Contains(bot.Name, "Хрум") {
+		flexRate = 0.50 // Sinusoidal rhythmic pacing
 	}
+
 	if bc.rnd.Float64() < flexRate {
 		bot.MuscleStep++
 	}

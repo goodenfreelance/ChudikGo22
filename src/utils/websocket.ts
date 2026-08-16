@@ -308,6 +308,13 @@ export class GameWebSocket {
     });
   }
 
+  public sendAdminRestartServer(reason: string = 'Сервер перезапущен администратором. Все очки и позиции сброшены.') {
+    this.send({
+      type: 'admin_restart_server',
+      reason,
+    });
+  }
+
   public subscribe(handler: MessageHandler) {
     this.handlers.add(handler);
     return () => this.handlers.delete(handler);

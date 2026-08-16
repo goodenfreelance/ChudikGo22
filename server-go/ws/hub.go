@@ -220,6 +220,32 @@ func (h *Hub) handleMessage(client *Client, msg game.WSInputMessage) {
 			}
 			h.mu.Unlock()
 		}
+
+	case "admin_restart_server":
+		reason := msg.Reason
+		if reason == "" {
+			reason = "Сервер перезапущен администратором. Все очки и позиции сброшены."
+		}
+		log.Printf("[WS ADMIN] Executing full server restart (reason: %s)...", reason)
+		kickMsg := game.WSOutputMessage{
+			Type:         "kicked",
+			KickedReason: reason,
+		}
+		kData, _ := json.Marshal(kickMsg)
+
+		h.mu.Lock()
+		for pid, client := range h.clients {
+			select {
+			case client.send <- kData:
+			default:
+			}
+			client.CloseSend()
+			delete(h.clients, pid)
+		}
+		h.mu.Unlock()
+
+		h.room.ResetWorld()
+		log.Printf("[WS ADMIN] Full server restart completed successfully. World reinitialized.")
 	}
 }
 

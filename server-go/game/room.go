@@ -96,10 +96,8 @@ func (r *Room) initWorld() {
 		r.spawnRandomFood()
 	}
 
-	bots := r.botController.SpawnInitialBots(r.minBots, r.worldRadius)
-	for _, bot := range bots {
-		b := bot
-		r.creatures[b.ID] = &b
+	for i := 0; i < r.minBots; i++ {
+		r.respawnSingleBot(i)
 	}
 }
 
@@ -521,22 +519,120 @@ func (r *Room) HandleAdminControlInput(targetCreatureID string, msg WSInputMessa
 }
 
 func (r *Room) GetRandomWildPoint() (float64, float64, float64) {
+	return r.GetRandomWildPointNonOverlapping(6.5)
+}
+
+func (r *Room) GetRandomWildPointNonOverlapping(minClearance float64) (float64, float64, float64) {
 	baseSize := math.Max(15.0, r.worldRadius*0.35)
 	baseMinX := r.worldRadius - baseSize
 	baseMinY := r.worldRadius - baseSize
+	worldSize := r.worldRadius * 2.0
 
-	var x, y float64
-	for i := 0; i < 60; i++ {
+	if minClearance <= 0 {
+		minClearance = 6.5 // Minimum distance between creature centers to prevent overlapping
+	}
+
+	var bestX, bestY, bestAngle float64
+	maxMinDist := -1.0
+
+	for attempt := 0; attempt < 120; attempt++ {
 		angle := r.rnd.Float64() * math.Pi * 2
 		dist := r.rnd.Float64() * (r.worldRadius * 0.82)
-		x = math.Round(math.Cos(angle) * dist)
-		y = math.Round(math.Sin(angle) * dist)
-		if x < (baseMinX-3.0) || y < (baseMinY-3.0) {
-			break
+		x := math.Round(math.Cos(angle) * dist)
+		y := math.Round(math.Sin(angle) * dist)
+
+		// Must be in wild field (strictly outside base area)
+		if x >= (baseMinX-3.0) && y >= (baseMinY-3.0) {
+			continue
+		}
+
+		// Calculate distance to all existing creatures with periodic toroidal wrap
+		closestDist := math.MaxFloat64
+		for _, c := range r.creatures {
+			dx := math.Abs(x - c.X)
+			if dx > r.worldRadius {
+				dx = worldSize - dx
+			}
+			dy := math.Abs(y - c.Y)
+			if dy > r.worldRadius {
+				dy = worldSize - dy
+			}
+			cDist := math.Hypot(dx, dy)
+			if cDist < closestDist {
+				closestDist = cDist
+			}
+		}
+
+		// If far enough from all creatures, accept immediately
+		if closestDist >= minClearance || len(r.creatures) == 0 {
+			angleDeg := r.rnd.Float64() * 360.0
+			return x, y, angleDeg
+		}
+
+		if closestDist > maxMinDist {
+			maxMinDist = closestDist
+			bestX = x
+			bestY = y
+			bestAngle = r.rnd.Float64() * 360.0
 		}
 	}
-	angleDeg := float64(r.rnd.Intn(360))
-	return x, y, angleDeg
+
+	if maxMinDist > 0 {
+		return bestX, bestY, bestAngle
+	}
+
+	angleDeg := r.rnd.Float64() * 360.0
+	return bestX, bestY, angleDeg
+}
+
+func (r *Room) respawnSingleBot(index int) *Creature {
+	presetIdx := (index + r.rnd.Intn(len(DefaultPresets))) % len(DefaultPresets)
+	preset := DefaultPresets[presetIdx]
+	name := preset.Name
+	color := BotColors[presetIdx%len(BotColors)]
+	id := fmt.Sprintf("bot-%d-%d", presetIdx+1, time.Now().UnixNano()%100000)
+
+	x, y, angleDeg := r.GetRandomWildPointNonOverlapping(6.5)
+
+	elements := make([]CreatureElement, len(preset.Elements))
+	copy(elements, preset.Elements)
+	forces := CalculatePhysicsForces(elements, 0)
+
+	bot := Creature{
+		ID:             id,
+		PlayerID:       "bot-" + id,
+		Name:           name,
+		Color:          color,
+		IsBot:          true,
+		X:              x,
+		Y:              y,
+		AngleDeg:       angleDeg,
+		TargetAngleDeg: angleDeg,
+		TargetX:        x,
+		TargetY:        y,
+		VelX:           0,
+		VelY:           0,
+		AngularVel:     0,
+		IsSleeping:     false,
+		Energy:         150,
+		MaxEnergy:      200,
+		FoodEaten:      30,
+		BankFood:       30,
+		Score:          150,
+		StepsCount:     0,
+		MuscleStep:     0,
+		State:          "hunting",
+		Elements:       elements,
+		Forces:         forces,
+		PrevX:          x,
+		PrevY:          y,
+		PrevAngleDeg:   angleDeg,
+		Kills:          0,
+		LastActive:     time.Now(),
+	}
+
+	r.creatures[id] = &bot
+	return &bot
 }
 
 func (r *Room) DeleteCreature(creatureID string) {
@@ -549,10 +645,10 @@ func (r *Room) SpawnAdminCreature(name, color string, elements []CreatureElement
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// If position is at (0, 0) or inside base, automatically spawn in random wild spot with random angle
+	// If position is at (0, 0) or inside base, automatically spawn in random wild spot with random angle without overlapping
 	var angle float64
 	if (x == 0 && y == 0) || IsInsideBase(x, y, r.worldRadius) {
-		wildX, wildY, wildAngle := r.GetRandomWildPoint()
+		wildX, wildY, wildAngle := r.GetRandomWildPointNonOverlapping(6.5)
 		x = wildX
 		y = wildY
 		angle = wildAngle
@@ -690,7 +786,7 @@ func (r *Room) Tick() {
 		dt = 0.01 // 100 FPS = 10ms
 	}
 
-	// 1. Maintain minimum bots count
+	// 1. Maintain minimum bots count (respawn dead bots in wild field without overlapping)
 	currentBots := 0
 	for _, c := range r.creatures {
 		if c.IsBot {
@@ -698,10 +794,9 @@ func (r *Room) Tick() {
 		}
 	}
 	if currentBots < r.minBots {
-		newBots := r.botController.SpawnInitialBots(r.minBots-currentBots, r.worldRadius)
-		for _, bot := range newBots {
-			b := bot
-			r.creatures[b.ID] = &b
+		needed := r.minBots - currentBots
+		for i := 0; i < needed; i++ {
+			r.respawnSingleBot(currentBots + i)
 		}
 	}
 
@@ -1060,3 +1155,15 @@ func (r *Room) buildLeaderboard() []LeaderboardEntry {
 	}
 	return entries
 }
+
+func (r *Room) ResetWorld() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.step = 0
+	r.creatures = make(map[string]*Creature)
+	r.foods = make(map[string]*Food)
+	r.spatialGrid.Clear()
+	r.initWorld()
+}
+
