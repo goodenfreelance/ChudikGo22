@@ -74,176 +74,159 @@ func (bc *BotController) CreateBot(id, name, color string, presetIdx int, startX
 	}
 }
 
-func (bc *BotController) UpdateBot(bot *Creature, foods []Food, creatures []Creature) {
-	// 1. Priority 1: Auto-targeting on nearest human player within 15 cells radius
+func (bc *BotController) UpdateBot(bot *Creature, foods []Food, creatures []Creature, worldRadius float64) {
+	if worldRadius <= 0 {
+		worldRadius = 50.0
+	}
+	worldSize := worldRadius * 2.0
+
+	// Helper for shortest toroidal delta
+	getToroidalDelta := func(targetX, targetY, fromX, fromY float64) (float64, float64, float64) {
+		dx := targetX - fromX
+		if dx > worldRadius {
+			dx -= worldSize
+		} else if dx < -worldRadius {
+			dx += worldSize
+		}
+		dy := targetY - fromY
+		if dy > worldRadius {
+			dy -= worldSize
+		} else if dy < -worldRadius {
+			dy += worldSize
+		}
+		dist := math.Hypot(dx, dy)
+		return dx, dy, dist
+	}
+
+	bot.IsSleeping = false
+	bot.IsBraking = false
+
+	// 1. Priority 1: Auto-targeting & jaw alignment on nearest active human player within engagement radius (25 cells)
 	var targetPlayer *Creature
-	minPlayerDistSq := math.Inf(1)
-	const autoTargetRadius = 15.0
-	const autoTargetRadiusSq = autoTargetRadius * autoTargetRadius // 225.0
+	minPlayerDist := math.Inf(1)
+	var playerDx, playerDy float64
+	const autoTargetRadius = 25.0
 
 	for i := range creatures {
 		c := &creatures[i]
-		if c.ID == bot.ID || c.IsBot || c.InBase || c.IsInvulnerable {
+		if c.ID == bot.ID || c.IsBot || c.InBase || c.IsInvulnerable || IsInsideBase(c.X, c.Y, worldRadius) {
 			continue
 		}
-		dx := c.X - bot.X
-		if dx > 50.0 {
-			dx -= 100.0
-		} else if dx < -50.0 {
-			dx += 100.0
-		}
-		dy := c.Y - bot.Y
-		if dy > 50.0 {
-			dy -= 100.0
-		} else if dy < -50.0 {
-			dy += 100.0
-		}
-		dSq := dx*dx + dy*dy
-		if dSq <= autoTargetRadiusSq && dSq < minPlayerDistSq {
-			minPlayerDistSq = dSq
+		dx, dy, dist := getToroidalDelta(c.X, c.Y, bot.X, bot.Y)
+		if dist <= autoTargetRadius && dist < minPlayerDist {
+			minPlayerDist = dist
 			targetPlayer = c
+			playerDx = dx
+			playerDy = dy
 		}
 	}
 
 	// 2. Scan for human player threats vs human player prey (BOTS DO NOT TARGET EACH OTHER)
 	var threatCreature *Creature
-	var preyCreature *Creature
-	minThreatDistSq := math.Inf(1)
-	minPreyDistSq := math.Inf(1)
+	minThreatDist := math.Inf(1)
+	var threatDx, threatDy float64
 
 	for i := range creatures {
 		c := &creatures[i]
-		// Bots never target or flee from other bots; only human players
 		if c.ID == bot.ID || c.IsBot {
 			continue
 		}
-		dx := c.X - bot.X
-		if dx > 50.0 {
-			dx -= 100.0
-		} else if dx < -50.0 {
-			dx += 100.0
-		}
-		dy := c.Y - bot.Y
-		if dy > 50.0 {
-			dy -= 100.0
-		} else if dy < -50.0 {
-			dy += 100.0
-		}
-		dSq := dx*dx + dy*dy
-
-		if (c.Score > bot.Score+40 || c.IsInvulnerable) && dSq < 64.0 {
-			if dSq < minThreatDistSq {
-				minThreatDistSq = dSq
+		dx, dy, dist := getToroidalDelta(c.X, c.Y, bot.X, bot.Y)
+		if (c.Score > bot.Score+50 || c.IsInvulnerable) && dist < 8.0 {
+			if dist < minThreatDist {
+				minThreatDist = dist
 				threatCreature = c
-			}
-		} else if c.Score <= bot.Score && dSq < 100.0 && !c.IsInvulnerable && !c.InBase {
-			if dSq < minPreyDistSq {
-				minPreyDistSq = dSq
-				preyCreature = c
+				threatDx = dx
+				threatDy = dy
 			}
 		}
 	}
 
-	// 3. Scan for food
+	// 3. Scan for closest food
 	var closestFood *Food
-	minFoodDistSq := math.Inf(1)
+	minFoodDist := math.Inf(1)
+	var foodDx, foodDy float64
 	for i := range foods {
 		f := &foods[i]
-		dx := f.X - bot.X
-		if dx > 50.0 {
-			dx -= 100.0
-		} else if dx < -50.0 {
-			dx += 100.0
-		}
-		dy := f.Y - bot.Y
-		if dy > 50.0 {
-			dy -= 100.0
-		} else if dy < -50.0 {
-			dy += 100.0
-		}
-		dSq := dx*dx + dy*dy
-		if dSq < minFoodDistSq {
-			minFoodDistSq = dSq
+		dx, dy, dist := getToroidalDelta(f.X, f.Y, bot.X, bot.Y)
+		if dist < minFoodDist {
+			minFoodDist = dist
 			closestFood = f
+			foodDx = dx
+			foodDy = dy
 		}
 	}
 
-	targetX := bot.X
-	targetY := bot.Y
+	targetAngleDeg := bot.TargetAngleDeg
 	shouldDash := false
 
 	if targetPlayer != nil {
-		// Auto-targeting actively locked on human player in 15 cells!
-		targetX = targetPlayer.X
-		targetY = targetPlayer.Y
+		// Player within engagement radius: Orient jaw on player for direct bite contact!
+		rad := math.Atan2(playerDy, playerDx)
+		targetAngleDeg = (rad * 180.0) / math.Pi
+		if targetAngleDeg < 0 {
+			targetAngleDeg += 360.0
+		}
+		bot.TargetX = targetPlayer.X
+		bot.TargetY = targetPlayer.Y
 		bot.State = "hunting"
-		if bot.FoodEaten >= 5 && minPlayerDistSq < 20.0 {
+
+		// Lunge attack dash when closing in on player with jaws
+		if bot.FoodEaten >= 2 && minPlayerDist < 7.5 {
 			shouldDash = true
 		}
-	} else if threatCreature != nil {
-		// Evade threat
-		dx := bot.X - threatCreature.X
-		dy := bot.Y - threatCreature.Y
-		targetX = bot.X + dx*2.0
-		targetY = bot.Y + dy*2.0
+	} else if threatCreature != nil && minThreatDist < 6.0 {
+		// Flee away from dominant threat
+		rad := math.Atan2(-threatDy, -threatDx)
+		targetAngleDeg = (rad * 180.0) / math.Pi
+		if targetAngleDeg < 0 {
+			targetAngleDeg += 360.0
+		}
+		bot.TargetX = bot.X - threatDx*2.0
+		bot.TargetY = bot.Y - threatDy*2.0
 		bot.State = "moving"
-		if bot.FoodEaten >= 10 && minThreatDistSq < 25.0 {
+		if bot.FoodEaten >= 5 && minThreatDist < 4.0 {
 			shouldDash = true
 		}
-	} else if preyCreature != nil && minPreyDistSq < 64.0 {
-		// Hunt smaller creature
-		targetX = preyCreature.X
-		targetY = preyCreature.Y
-		bot.State = "hunting"
-		if bot.FoodEaten >= 5 && minPreyDistSq < 16.0 {
-			shouldDash = true
-		}
-	} else if closestFood != nil && minFoodDistSq < 400.0 {
+	} else if closestFood != nil && minFoodDist < 30.0 {
 		// Hunt nearest food
-		targetX = closestFood.X
-		targetY = closestFood.Y
+		rad := math.Atan2(foodDy, foodDx)
+		targetAngleDeg = (rad * 180.0) / math.Pi
+		if targetAngleDeg < 0 {
+			targetAngleDeg += 360.0
+		}
+		bot.TargetX = closestFood.X
+		bot.TargetY = closestFood.Y
 		bot.State = "hunting"
-		if bot.FoodEaten >= 15 && minFoodDistSq < 12.0 {
+		if bot.FoodEaten >= 15 && minFoodDist < 3.0 {
 			shouldDash = true
 		}
 	} else {
-		// Wander with variety
-		if bc.rnd.Float64() < 0.08 {
-			rad := bc.rnd.Float64() * math.Pi * 2
-			targetX = bot.X + math.Cos(rad)*15.0
-			targetY = bot.Y + math.Sin(rad)*15.0
-		} else {
-			targetX = bot.TargetX
-			targetY = bot.TargetY
+		// Natural wander navigation
+		if bc.rnd.Float64() < 0.05 {
+			wanderAngle := bc.rnd.Float64() * math.Pi * 2
+			targetAngleDeg = (wanderAngle * 180.0) / math.Pi
+			if targetAngleDeg < 0 {
+				targetAngleDeg += 360.0
+			}
+			bot.TargetX = bot.X + math.Cos(wanderAngle)*12.0
+			bot.TargetY = bot.Y + math.Sin(wanderAngle)*12.0
 		}
 	}
 
-	bot.TargetX = targetX
-	bot.TargetY = targetY
+	bot.TargetAngleDeg = targetAngleDeg
 	bot.IsDashing = shouldDash
 
-	// Calculate target steering angle
-	dx := targetX - bot.X
-	dy := targetY - bot.Y
-	if math.Hypot(dx, dy) > 0.1 {
-		rad := math.Atan2(dy, dx)
-		targetAngle := (rad * 180.0) / math.Pi
-		if targetAngle < 0 {
-			targetAngle += 360
-		}
-		bot.TargetAngleDeg = targetAngle
-	}
-
-	// Distinct muscle flex rhythms and trajectories across bot types
+	// Distinct muscle flex cadence across bot presets
 	flexRate := 0.45
 	if strings.Contains(bot.Name, "Торпеда") || strings.Contains(bot.Name, "Шпунтик") {
-		flexRate = 0.85 // Ultra-fast propulsion & twitchy bursts
+		flexRate = 0.85 // Fast bursts
 	} else if strings.Contains(bot.Name, "Колобок") || strings.Contains(bot.Name, "Тапок") || strings.Contains(bot.Name, "Пельмень") {
-		flexRate = 0.30 // Heavy steady pacing
+		flexRate = 0.35 // Heavy steady pacing
 	} else if strings.Contains(bot.Name, "Вихревой") {
-		flexRate = 0.65 // Asymmetrical spinning cadence
+		flexRate = 0.65 // Agile cadence
 	} else if strings.Contains(bot.Name, "Горыныч") || strings.Contains(bot.Name, "Хрум") {
-		flexRate = 0.50 // Sinusoidal rhythmic pacing
+		flexRate = 0.50 // Sinusoidal swimming
 	}
 
 	if bc.rnd.Float64() < flexRate {

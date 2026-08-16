@@ -672,6 +672,10 @@ func ApplyHydrodynamicDrag(c *Creature, dt float64) {
 // CheckAndSetSleepingState implements "Sleeping Islands" (Phase 4):
 // If velocity and angular velocity are below threshold, sleep body to conserve CPU.
 func CheckAndSetSleepingState(c *Creature) {
+	if c.IsBot {
+		c.IsSleeping = false
+		return
+	}
 	cfg := GetGlobalConfig()
 	threshold := cfg.Physics.SleepVelocityThreshold
 	if threshold <= 0 {

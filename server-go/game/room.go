@@ -828,28 +828,25 @@ func (r *Room) Tick() {
 		c.PrevY = c.Y
 		c.PrevAngleDeg = c.AngleDeg
 
-		// Bot AI — scan nearby entities
+		// Bot AI — scan nearby entities & players
 		if c.IsBot {
-			nearbyFoodIDs := r.spatialGrid.GetNearby(c.X, c.Y, 25.0)
+			nearbyFoodIDs := r.spatialGrid.GetNearby(c.X, c.Y, 35.0)
 			botFoods := make([]Food, 0, len(nearbyFoodIDs))
 			for _, fid := range nearbyFoodIDs {
 				if f, ok := r.foods[fid]; ok {
 					botFoods = append(botFoods, *f)
 				}
 			}
-			nearbyCreatureIDs := creatureGrid.GetNearby(c.X, c.Y, 25.0)
-			botCreatures := make([]Creature, 0, len(nearbyCreatureIDs))
-			for _, cid := range nearbyCreatureIDs {
-				if ci, ok := creatureMap[cid]; ok {
-					botCreatures = append(botCreatures, creatureSlice[ci])
-				}
+			botCreatures := make([]Creature, 0, len(r.creatures))
+			for _, otherC := range r.creatures {
+				botCreatures = append(botCreatures, *otherC)
 			}
-			r.botController.UpdateBot(c, botFoods, botCreatures)
+			r.botController.UpdateBot(c, botFoods, botCreatures, r.worldRadius)
+		} else {
+			// Advance muscle cycle smoothly based on real time (~2.5 Hz natural cadence for player)
+			c.StepsCount++
+			c.MuscleStep = int(float64(c.StepsCount) * dt * 5.0)
 		}
-
-		// Advance muscle cycle smoothly based on real time (~2.5 Hz natural cadence)
-		c.StepsCount++
-		c.MuscleStep = int(float64(c.StepsCount) * dt * 5.0)
 
 		// Calculate physics forces (Phase 1, 3, 5)
 		c.Forces = CalculatePhysicsForces(c.Elements, c.MuscleStep)
@@ -900,8 +897,8 @@ func (r *Room) Tick() {
 				c.DashFractionAccum = 0
 			}
 
-			// Muscle torque applied to rotation target steering
-			if math.Abs(c.Forces.NetRotationDeg) > 0.001 {
+			// Muscle torque applied to rotation target steering (for player passive drift)
+			if !c.IsBot && math.Abs(c.Forces.NetRotationDeg) > 0.001 {
 				rotSpeedDegPerSec := c.Forces.NetRotationDeg * 2.2
 				c.TargetAngleDeg += rotSpeedDegPerSec * dt
 				for c.TargetAngleDeg >= 360.0 {
@@ -921,10 +918,13 @@ func (r *Room) Tick() {
 				angleDiff += 360
 			}
 
-			// Smooth turn rate with rotational inertia (deg/sec)
-			turnSpeed := math.Max(45.0, math.Min(180.0, 75.0+math.Abs(c.Forces.NetRotationDeg)*2.0))
-			if c.State == "dashing" && c.IsDashing && c.FoodEaten > 0 {
-				turnSpeed *= 1.3
+			// Fast and agile turn rate with rotational inertia (deg/sec)
+			turnSpeed := 180.0
+			if !c.IsBot {
+				turnSpeed = math.Max(60.0, math.Min(240.0, 90.0+math.Abs(c.Forces.NetRotationDeg)*3.0))
+			}
+			if (c.State == "dashing" || c.IsDashing) && c.FoodEaten > 0 {
+				turnSpeed *= 1.4
 			}
 
 			maxTurnThisFrame := turnSpeed * dt
@@ -942,9 +942,10 @@ func (r *Room) Tick() {
 			// Forward velocity propulsion in grid cells per second
 			dx, dy := GetVectorFromAngle(c.AngleDeg)
 
-			// Target cruising speed (approx 1.5 - 3.5 grid cells / second)
-			targetSpeed := c.Forces.ForwardSpeed * 8.5
-			if c.State == "dashing" && c.IsDashing && c.FoodEaten > 0 {
+			// Target cruising speed (approx 2.0 - 4.5 grid cells / second) based on physical thrust
+			thrustSpeed := math.Max(0.35, c.Forces.ForwardSpeed)
+			targetSpeed := thrustSpeed * 7.5
+			if (c.State == "dashing" || c.IsDashing) && c.FoodEaten > 0 {
 				dashMult := cfg.Physics.DashMultiplier
 				if dashMult <= 0 {
 					dashMult = 1.6
@@ -953,7 +954,7 @@ func (r *Room) Tick() {
 			}
 
 			// Responsive acceleration toward propulsion heading
-			accelRate := 10.0
+			accelRate := 12.0
 			c.VelX += (dx*targetSpeed - c.VelX) * (1.0 - math.Exp(-accelRate*dt))
 			c.VelY += (dy*targetSpeed - c.VelY) * (1.0 - math.Exp(-accelRate*dt))
 
