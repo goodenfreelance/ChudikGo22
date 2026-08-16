@@ -200,19 +200,17 @@ func GetElementCost(t ElementType) int {
 	}
 	switch t {
 	case ElementHeadJaw:
-		return 18
+		return 180
 	case ElementHead:
-		return 5
+		return 50
 	case ElementMuscleRandomLeft, ElementMuscleRandomRight:
-		return 3
+		return 35
 	case ElementMuscleLeft, ElementMuscleRight:
-		return 2
-	case ElementJoint:
-		return 1
-	case ElementEdgeH, ElementEdgeV, ElementEdgeD1, ElementEdgeD2:
-		return 1
+		return 25
+	case ElementJoint, ElementEdgeH, ElementEdgeV, ElementEdgeD1, ElementEdgeD2, "eye", "mouth":
+		return 10
 	default:
-		return 1
+		return 10
 	}
 }
 
@@ -1359,6 +1357,9 @@ func ResolveCreatureBites(creatures map[string]*Creature, spawnFoodCb func(x, y 
 
 		if removeIdx >= 0 && removeIdx < len(cB.Elements) {
 			bittenEl := cB.Elements[removeIdx]
+			originalElementsB := make([]CreatureElement, len(cB.Elements))
+			copy(originalElementsB, cB.Elements)
+
 			remainingEls := make([]CreatureElement, 0, len(cB.Elements)-1)
 			remainingEls = append(remainingEls, cB.Elements[:removeIdx]...)
 			remainingEls = append(remainingEls, cB.Elements[removeIdx+1:]...)
@@ -1368,12 +1369,24 @@ func ResolveCreatureBites(creatures map[string]*Creature, spawnFoodCb func(x, y 
 
 			cB.Elements = winningComp
 
-			// Bio-Nuggets drop mechanics:
-			// 60% of bitten piece value drops as Golden/Super Bio-Nuggets
-			// 20% drops as regular berry food
-			// 20% burns
+			// Calculate sum of cost of ALL severed/eaten parts (the bitten element + any parts in discarded components)
+			totalEatenCost := 0
+			winningMap := make(map[string]bool)
+			for _, el := range winningComp {
+				winningMap[el.ID] = true
+			}
+			for _, el := range originalElementsB {
+				if !winningMap[el.ID] {
+					totalEatenCost += GetElementCost(el.Type)
+				}
+			}
+			if totalEatenCost <= 0 {
+				totalEatenCost = GetElementCost(bittenEl.Type)
+			}
+
+			// Bio-Nuggets visual food drops around contact point
 			elemCost := GetElementCost(bittenEl.Type)
-			bioCount := int(math.Max(1.0, math.Round(float64(elemCost)*0.60/15.0)))
+			bioCount := int(math.Max(1.0, math.Round(float64(elemCost)*0.40/15.0)))
 			regCount := int(math.Max(1.0, math.Round(float64(elemCost)*0.20/5.0)))
 
 			if spawnFoodCb != nil {
@@ -1394,25 +1407,38 @@ func ResolveCreatureBites(creatures map[string]*Creature, spawnFoodCb func(x, y 
 			}
 
 			if len(cB.Elements) == 0 {
-				// Target creature destroyed completely
-				if cB.FoodEaten > 0 && spawnFoodCb != nil {
-					dropBio := int(math.Max(1.0, float64(cB.FoodEaten)*0.60/10.0))
+				// Target creature destroyed completely!
+				// Attacker receives the sum of all eaten parts PLUS accumulated food stored by victim!
+				victimFood := cB.FoodEaten
+				if cB.BankFood > victimFood {
+					victimFood = cB.BankFood
+				}
+				if victimFood < 0 {
+					victimFood = 0
+				}
+
+				if victimFood > 0 && spawnFoodCb != nil {
+					dropBio := int(math.Max(1.0, float64(victimFood)*0.30/10.0))
 					for db := 0; db < dropBio; db++ {
 						fx := cB.X + (rand.Float64()-0.5)*2.0
 						fy := cB.Y + (rand.Float64()-0.5)*2.0
 						spawnFoodCb(fx, fy, FoodGolden)
 					}
 				}
+
 				delete(creatures, cB.ID)
-				cA.FoodEaten += 10
-				cA.Score += 100
+				cA.FoodEaten += totalEatenCost + victimFood
+				cA.BankFood += totalEatenCost + victimFood
+				cA.Score += totalEatenCost + victimFood + 100
 				cA.Kills++
 				cA.Energy = math.Min(cA.MaxEnergy, cA.Energy+50.0)
 			} else {
+				// Creature severed/partially eaten: attacker receives sum value of all severed parts
 				cB.Forces = CalculatePhysicsForces(cB.Elements, cB.MuscleStep)
-				cA.FoodEaten += 2
-				cA.Score += 25
-				cA.Energy = math.Min(cA.MaxEnergy, cA.Energy+15.0)
+				cA.FoodEaten += totalEatenCost
+				cA.BankFood += totalEatenCost
+				cA.Score += totalEatenCost
+				cA.Energy = math.Min(cA.MaxEnergy, cA.Energy+math.Min(30.0, float64(totalEatenCost)*0.5))
 			}
 		}
 	}

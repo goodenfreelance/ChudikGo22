@@ -113,6 +113,8 @@ export interface Creature {
   maxEnergy: number;
   foodEaten: number;
   bankFood?: number;
+  score?: number;
+  kills?: number;
   inBase?: boolean;
   stepsCount: number;
   angleDeg: number;

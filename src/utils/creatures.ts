@@ -1682,6 +1682,7 @@ export function resolveCreatureBites(creatures: Creature[]): { creatures: Creatu
 
     if (removeIdx >= 0 && removeIdx < cB.elements.length) {
       hasBitten = true;
+      const originalElementsB = [...cB.elements];
       const remainingEls = cB.elements.filter((_, idx) => idx !== removeIdx);
 
       const comps = findConnectedComponents(remainingEls);
@@ -1689,13 +1690,29 @@ export function resolveCreatureBites(creatures: Creature[]): { creatures: Creatu
 
       cB.elements = winningComp;
 
+      // Calculate sum of cost of ALL severed/eaten parts
+      const winningSet = new Set(winningComp.map((e) => e.id));
+      let totalEatenCost = 0;
+      for (const el of originalElementsB) {
+        if (!winningSet.has(el.id)) {
+          totalEatenCost += getElementPrice(el.type);
+        }
+      }
+      if (totalEatenCost <= 0) {
+        totalEatenCost = getElementPrice(originalElementsB[removeIdx]?.type || 'edge-h');
+      }
+
       if (cB.elements.length === 0) {
+        const victimFood = Math.max(0, cB.foodEaten || 0);
         creatureMap.delete(cB.id);
-        cA.foodEaten = (cA.foodEaten || 0) + 5;
+        cA.foodEaten = (cA.foodEaten || 0) + totalEatenCost + victimFood;
+        cA.score = (cA.score || 0) + totalEatenCost + victimFood + 100;
+        cA.kills = (cA.kills || 0) + 1;
         soundFx.playCannibalism(true);
       } else {
         cB.forces = calculatePhysicsForces(cB.elements, cB.muscleStep || 0);
-        cA.foodEaten = (cA.foodEaten || 0) + 1;
+        cA.foodEaten = (cA.foodEaten || 0) + totalEatenCost;
+        cA.score = (cA.score || 0) + totalEatenCost;
         soundFx.playCannibalism(false);
       }
     }

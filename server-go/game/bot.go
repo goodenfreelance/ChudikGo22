@@ -105,7 +105,7 @@ func (bc *BotController) UpdateBot(bot *Creature, foods []Food, creatures []Crea
 		}
 	}
 
-	// 2. Scan for threats (e.g. much larger players) vs other prey
+	// 2. Scan for human player threats vs human player prey (BOTS DO NOT TARGET EACH OTHER)
 	var threatCreature *Creature
 	var preyCreature *Creature
 	minThreatDistSq := math.Inf(1)
@@ -113,7 +113,8 @@ func (bc *BotController) UpdateBot(bot *Creature, foods []Food, creatures []Crea
 
 	for i := range creatures {
 		c := &creatures[i]
-		if c.ID == bot.ID {
+		// Bots never target or flee from other bots; only human players
+		if c.ID == bot.ID || c.IsBot {
 			continue
 		}
 		dx := c.X - bot.X

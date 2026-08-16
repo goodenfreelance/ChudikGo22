@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronUp, ChevronDown, Wifi, WifiOff } from 'lucide-react';
 import { Creature, CreatureElement, Food, GridTheme, SimulationStats, PendingPlacement, CreatureLogEntry, SavedPreset, User } from './types';
-import { createCreature, calculatePhysicsForces, determineCreatureHeadAngle, DEFAULT_PRESETS, isInsideBase, getBaseBounds, updateElementPrices, canSpawnCreature, calculateElementsPrice } from './utils/creatures';
+import { createCreature, calculatePhysicsForces, determineCreatureHeadAngle, DEFAULT_PRESETS, STARTER_PRESET, isInsideBase, getBaseBounds, updateElementPrices, canSpawnCreature, calculateElementsPrice } from './utils/creatures';
 import { soundFx } from './utils/audio';
 import { gameWs, LeaderboardEntry, ServerStats, WSChatMessage } from './utils/websocket';
 import { GridCanvas } from './components/GridCanvas';
@@ -298,9 +298,9 @@ export default function App() {
         elementCount: 9,
         leftMass: 3,
         rightMass: 3,
-        totalMass: 6,
+        totalMass: 2,
         randomMusclesInfo: 'Стандартные физические мышцы',
-        elements: DEFAULT_PRESETS[0].elements,
+        elements: STARTER_PRESET.elements,
       },
     ];
   });
@@ -397,7 +397,7 @@ export default function App() {
 
   // Connect Go Server WebSockets
   useEffect(() => {
-    gameWs.connect(playerName, playerColor, DEFAULT_PRESETS[0].elements, 0);
+    gameWs.connect(playerName, playerColor, STARTER_PRESET.elements, 0);
 
     const unsubscribe = gameWs.subscribe((msg) => {
       if (msg.type === 'init') {
