@@ -95,6 +95,18 @@ export default function App() {
 
   const handleSpendFood = useCallback(async (amount: number): Promise<boolean> => {
     if (amount <= 0) return true;
+    setLocalFood((prev) => {
+      const next = Math.max(0, prev - amount);
+      try {
+        localStorage.setItem('creatures_food', next.toString());
+        localStorage.setItem('creatures_bank_food', next.toString());
+      } catch (e) {
+        // ignore
+      }
+      return next;
+    });
+    gameWs.send({ type: 'spend_bank_food', bankFoodAmount: amount });
+
     if (authToken) {
       try {
         const res = await fetch('/api/user/food/spend', {
@@ -107,26 +119,31 @@ export default function App() {
         });
         const data = await res.json();
         if (res.ok && data.status === 'ok') {
-          const balance = data.food ?? data.bankFood ?? 0;
-          setLocalFood(balance);
           if (authUser) {
-            setAuthUser((prev) => prev ? { ...prev, food: balance, bankFood: balance } : null);
+            setAuthUser((prev) => prev ? { ...prev, food: data.food ?? prev.food, bankFood: data.bankFood ?? prev.bankFood } : null);
           }
-          gameWs.send({ type: 'spend_bank_food', bankFoodAmount: amount });
-          return true;
         }
       } catch (e) {
         console.error('Error spending food on server:', e);
       }
     }
-
-    setLocalFood((prev) => Math.max(0, prev - amount));
-    gameWs.send({ type: 'spend_bank_food', bankFoodAmount: amount });
     return true;
   }, [authToken, authUser]);
 
   const handleDepositFood = useCallback(async (amount: number): Promise<boolean> => {
     if (amount <= 0) return true;
+    setLocalFood((prev) => {
+      const next = prev + amount;
+      try {
+        localStorage.setItem('creatures_food', next.toString());
+        localStorage.setItem('creatures_bank_food', next.toString());
+      } catch (e) {
+        // ignore
+      }
+      return next;
+    });
+    gameWs.send({ type: 'deposit_bank_food', bankFoodAmount: amount });
+
     if (authToken) {
       try {
         const res = await fetch('/api/user/food/deposit', {
@@ -139,21 +156,14 @@ export default function App() {
         });
         const data = await res.json();
         if (res.ok && data.status === 'ok') {
-          const balance = data.food ?? data.bankFood ?? 0;
-          setLocalFood(balance);
           if (authUser) {
-            setAuthUser((prev) => prev ? { ...prev, food: balance, bankFood: balance } : null);
+            setAuthUser((prev) => prev ? { ...prev, food: data.food ?? prev.food, bankFood: data.bankFood ?? prev.bankFood } : null);
           }
-          gameWs.send({ type: 'deposit_bank_food', bankFoodAmount: amount });
-          return true;
         }
       } catch (e) {
         console.error('Error depositing food on server:', e);
       }
     }
-
-    setLocalFood((prev) => prev + amount);
-    gameWs.send({ type: 'deposit_bank_food', bankFoodAmount: amount });
     return true;
   }, [authToken, authUser]);
 
@@ -168,8 +178,8 @@ export default function App() {
           if (data.status === 'ok' && data.user) {
             setAuthUser(data.user);
             const foodVal = data.user.food ?? data.user.bankFood;
-            if (typeof foodVal === 'number') {
-              setLocalFood(foodVal);
+            if (typeof foodVal === 'number' && foodVal > 0) {
+              setLocalFood((prev) => Math.max(prev, foodVal));
             }
           } else {
             localStorage.removeItem('creatures_auth_token');
@@ -417,12 +427,16 @@ export default function App() {
           setWorldRadius(msg.worldRadius);
         }
         if (msg.creatures) {
-          const myId = yourCreatureIdRef.current;
-          if (myId) {
-            const me = msg.creatures.find((c: any) => c.id === myId);
-            if (me) {
-              const currentFoodVal = typeof me.foodEaten === 'number' ? me.foodEaten : (me.bankFood ?? 0);
-              setLocalFood(currentFoodVal);
+          const targetId = controlledCreatureId || yourCreatureIdRef.current || yourCreatureId || selectedCreatureId;
+          const me = (targetId ? msg.creatures.find((c: any) => c.id === targetId) : null) || msg.creatures.find((c: any) => !c.isBot);
+          if (me) {
+            const currentFoodVal = typeof me.foodEaten === 'number' ? me.foodEaten : (me.bankFood ?? 0);
+            setLocalFood(currentFoodVal);
+            try {
+              localStorage.setItem('creatures_food', currentFoodVal.toString());
+              localStorage.setItem('creatures_bank_food', currentFoodVal.toString());
+            } catch (e) {
+              // ignore
             }
           }
           setCreatures((prev) => {
@@ -1525,9 +1539,16 @@ export default function App() {
 
       {/* Creature Editor Modal */}
       {isEditorOpen && (() => {
-        const activeEditingCreature = (creatures || []).find((c) => c.id === editingCreatureId) || null;
-        const targetCreatureFood = activeEditingCreature ? Math.max(activeEditingCreature.foodEaten ?? 0, activeEditingCreature.bankFood ?? 0) : 0;
-        const effectiveFood = activeEditingCreature ? (targetCreatureFood > 0 ? targetCreatureFood : localFood) : localFood;
+        const myActiveCreature = (creatures || []).find(
+          (c) => c.id === (controlledCreatureId || yourCreatureId || selectedCreatureId)
+        ) || (creatures || []).find((c) => !c.isBot) || (creatures || [])[0];
+        const activeEditingCreature = editingCreatureId
+          ? (creatures || []).find((c) => c.id === editingCreatureId) || null
+          : myActiveCreature || null;
+        const targetCreatureFood = activeEditingCreature
+          ? Math.max(activeEditingCreature.foodEaten ?? 0, activeEditingCreature.bankFood ?? 0)
+          : (myActiveCreature ? Math.max(myActiveCreature.foodEaten ?? 0, myActiveCreature.bankFood ?? 0) : 0);
+        const effectiveFood = Math.max(localFood, targetCreatureFood);
         return (
           <CreatureEditor
             isOpen={isEditorOpen}
